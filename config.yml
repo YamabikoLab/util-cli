@@ -1,0 +1,11 @@
+keywords:
+  - main
+  - egrep
+options: -iral
+regex: '{key}|\.?{key}'
+exclusions:
+  directories:
+    - public
+    - spec
+  files:
+    - .gitignore
