@@ -26,6 +26,8 @@ type Config struct {
 	} `yaml:"egrep"`
 }
 
+const ExcelSheetNameLimit = 31
+
 func main() {
 	var utCmd = &cobra.Command{
 		Use:   "ut",
@@ -136,7 +138,13 @@ func main() {
 					continue
 				}
 
-				_, err = f.NewSheet(keyword)
+				sheetName := keyword
+
+				if len(sheetName) > ExcelSheetNameLimit {
+					sheetName = sheetName[:ExcelSheetNameLimit] // Truncate and prepend with index to ensure uniqueness
+				}
+
+				_, err = f.NewSheet(sheetName)
 				if err != nil {
 					_, err := fmt.Fprintln(os.Stderr, err.Error())
 					if err != nil {
