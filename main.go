@@ -110,13 +110,19 @@ func main() {
 					if len(strings.TrimSpace(string(out))) == 0 {
 						noResultKeywords = append(noResultKeywords, keyword)
 					}
-					fmt.Fprintln(os.Stderr, err.Error())
+					_, err := fmt.Fprintln(os.Stderr, err.Error())
+					if err != nil {
+						return err
+					}
 					continue
 				}
 
 				_, err = f.NewSheet(keyword)
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err.Error())
+					_, err := fmt.Fprintln(os.Stderr, err.Error())
+					if err != nil {
+						return err
+					}
 					continue
 				}
 
