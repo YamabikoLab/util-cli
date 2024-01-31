@@ -1,41 +1,47 @@
 package main
 
 import (
-	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/xuri/excelize/v2"
 )
 
 func main() {
 	var utCmd = &cobra.Command{
 		Use:   "ut",
 		Short: "UT command",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("ut")
-		},
+		RunE:  func(cmd *cobra.Command, args []string) error { return nil },
 	}
 
 	var egrepCmd = &cobra.Command{
 		Use:                "egrep",
 		Short:              "egrep command",
 		DisableFlagParsing: true,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := exec.Command("egrep", args...).CombinedOutput()
 			if err != nil {
-				fmt.Println(fmt.Sprintf("Error occurred: %v", err))
-				return
+				return err
 			}
-			fmt.Println(string(out))
+
+			f := excelize.NewFile()
+
+			lines := strings.Split(string(out), "\n")
+			for i, line := range lines {
+				// Excel file indexes start from 1, not 0
+				f.SetCellValue("Sheet1", "A"+strconv.Itoa(i+1), line)
+			}
+
+			if err := f.SaveAs("EgrepResults.xlsx"); err != nil {
+				return err
+			}
+
+			return nil
 		},
 	}
 
 	utCmd.AddCommand(egrepCmd)
-
-	err := utCmd.Execute()
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Error occurred: %v", strings.TrimSpace(err.Error())))
-		return
-	}
+	utCmd.Execute()
 }
