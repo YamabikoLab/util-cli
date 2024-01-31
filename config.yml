@@ -1,7 +1,8 @@
 keywords:
   - main
   - egrep
-options: -iral
+  - excel
+options: -iran
 regex: '{key}|\.?{key}'
 exclusions:
   directories:
@@ -9,3 +10,4 @@ exclusions:
     - spec
   files:
     - .gitignore
+targetDir: ./

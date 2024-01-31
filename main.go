@@ -16,6 +16,8 @@ type Config struct {
 	Regex      string     `yaml:"regex"`
 	Exclusions Exclusions `yaml:"exclusions"`
 	Options    string     `yaml:"options"`
+	TargetDir  string     `yaml:"targetDir"`
+	Output     string     `yaml:"output"`
 }
 
 type Exclusions struct {
@@ -59,9 +61,19 @@ func main() {
 				excludedFiles += fmt.Sprintf(" --exclude=%s", file)
 			}
 
+			targetDir := "."
+			if config.TargetDir != "" {
+				targetDir = config.TargetDir
+			}
+
+			output := "EgrepResults.xlsx"
+			if config.Output != "" {
+				output = config.Output
+			}
+
 			for _, keyword := range config.Keywords {
 				replacedRegex := strings.ReplaceAll(config.Regex, "{key}", keyword)
-				out, err := exec.Command("bash", "-c", fmt.Sprintf("egrep %s '%s' ./ %s %s", config.Options, replacedRegex, excludedDirs, excludedFiles)).Output()
+				out, err := exec.Command("bash", "-c", fmt.Sprintf("egrep %s '%s' %s %s %s", config.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)).Output()
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err.Error())
 					continue
@@ -79,9 +91,12 @@ func main() {
 				}
 			}
 
-			if err := f.SaveAs("EgrepResults.xlsx"); err != nil {
+			if err := f.SaveAs(output); err != nil {
 				return err
 			}
+
+			fmt.Println("Output saved to:", output)
+
 			return nil
 		},
 	}
