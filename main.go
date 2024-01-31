@@ -52,11 +52,20 @@ func main() {
 			f := excelize.NewFile()
 
 			// Add a new sheet named "result"
-			f.NewSheet("result")
+			_, err = f.NewSheet("result")
+			if err != nil {
+				return err
+			}
 
 			// Set the headers for the "result" sheet
-			f.SetCellValue("result", "A1", "keyword")
-			f.SetCellValue("result", "B1", "cmd")
+			err = f.SetCellValue("result", "A1", "keyword")
+			if err != nil {
+				return err
+			}
+			err = f.SetCellValue("result", "B1", "cmd")
+			if err != nil {
+				return err
+			}
 
 			egrepConfig := config.Egrep
 
@@ -88,8 +97,14 @@ func main() {
 				out, err := exec.Command("bash", "-c", cmd).Output()
 
 				// Output the keyword and command to the "result" sheet
-				f.SetCellValue("result", fmt.Sprintf("A%d", i+2), keyword)
-				f.SetCellValue("result", fmt.Sprintf("B%d", i+2), cmd)
+				err = f.SetCellValue("result", fmt.Sprintf("A%d", i+2), keyword)
+				if err != nil {
+					return err
+				}
+				err = f.SetCellValue("result", fmt.Sprintf("B%d", i+2), cmd)
+				if err != nil {
+					return err
+				}
 
 				if err != nil {
 					if len(strings.TrimSpace(string(out))) == 0 {
@@ -128,5 +143,8 @@ func main() {
 	}
 
 	utCmd.AddCommand(egrepCmd)
-	utCmd.Execute()
+	err := utCmd.Execute()
+	if err != nil {
+		return
+	}
 }
