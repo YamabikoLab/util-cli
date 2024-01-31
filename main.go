@@ -40,14 +40,20 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, err := fmt.Fprintln(os.Stderr, err)
+				if err != nil {
+					return err
+				}
 				os.Exit(1)
 			}
 
 			configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
 			data, err := os.ReadFile(configFile)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, err := fmt.Fprintln(os.Stderr, err)
+				if err != nil {
+					return err
+				}
 				os.Exit(1)
 			}
 
@@ -55,7 +61,10 @@ func main() {
 
 			err = yaml.Unmarshal(data, &config)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, err := fmt.Fprintln(os.Stderr, err)
+				if err != nil {
+					return err
+				}
 				os.Exit(1)
 			}
 
