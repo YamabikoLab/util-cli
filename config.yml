@@ -1,5 +1,7 @@
 egrep:
   keywords:
+    - main
+    - excel
     - Directories
   options: -iran
   regex: '\.{key}'

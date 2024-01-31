@@ -25,11 +25,6 @@ type Config struct {
 	} `yaml:"egrep"`
 }
 
-type Exclusions struct {
-	Directories []string `yaml:"directories"`
-	Files       []string `yaml:"files"`
-}
-
 func main() {
 	var utCmd = &cobra.Command{
 		Use:   "ut",
@@ -56,6 +51,13 @@ func main() {
 
 			f := excelize.NewFile()
 
+			// Add a new sheet named "result"
+			f.NewSheet("result")
+
+			// Set the headers for the "result" sheet
+			f.SetCellValue("result", "A1", "keyword")
+			f.SetCellValue("result", "B1", "cmd")
+
 			egrepConfig := config.Egrep
 
 			excludedDirs := ""
@@ -78,10 +80,21 @@ func main() {
 				output = egrepConfig.Output
 			}
 
-			for _, keyword := range egrepConfig.Keywords {
+			noResultKeywords := []string{}
+
+			for i, keyword := range egrepConfig.Keywords {
 				replacedRegex := strings.ReplaceAll(egrepConfig.Regex, "{key}", keyword)
-				out, err := exec.Command("bash", "-c", fmt.Sprintf("egrep %s '%s' %s %s %s", egrepConfig.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)).Output()
+				cmd := fmt.Sprintf("egrep %s '%s' %s %s %s", egrepConfig.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)
+				out, err := exec.Command("bash", "-c", cmd).Output()
+
+				// Output the keyword and command to the "result" sheet
+				f.SetCellValue("result", fmt.Sprintf("A%d", i+2), keyword)
+				f.SetCellValue("result", fmt.Sprintf("B%d", i+2), cmd)
+
 				if err != nil {
+					if len(strings.TrimSpace(string(out))) == 0 {
+						noResultKeywords = append(noResultKeywords, keyword)
+					}
 					fmt.Fprintln(os.Stderr, err.Error())
 					continue
 				}
@@ -93,8 +106,8 @@ func main() {
 				}
 
 				lines := strings.Split(string(out), "\n")
-				for i := 1; i <= len(lines); i++ {
-					_ = f.SetCellValue(keyword, fmt.Sprintf("A%d", i), lines[i-1])
+				for j := 1; j <= len(lines); j++ {
+					_ = f.SetCellValue(keyword, fmt.Sprintf("A%d", j), lines[j-1])
 				}
 			}
 
@@ -102,6 +115,12 @@ func main() {
 				return err
 			}
 
+			if len(noResultKeywords) > 0 {
+				fmt.Println("No results keywords:")
+				for _, keyword := range noResultKeywords {
+					fmt.Println(keyword)
+				}
+			}
 			fmt.Println("Output saved to:", output)
 
 			return nil
