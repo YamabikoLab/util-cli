@@ -1,13 +1,13 @@
-keywords:
-  - main
-  - egrep
-  - excel
-options: -iran
-regex: '{key}|\.?{key}'
-exclusions:
-  directories:
-    - public
-    - spec
-  files:
-    - .gitignore
-targetDir: ./
+egrep:
+  keywords:
+    - Directories
+  options: -iran
+  regex: '\.{key}'
+  exclusions:
+    directories:
+      - public
+      - spec
+    files:
+      - .gitignore
+  targetDir: ./
+  output: 'test.xlsx'

@@ -12,12 +12,17 @@ import (
 )
 
 type Config struct {
-	Keywords   []string   `yaml:"keywords"`
-	Regex      string     `yaml:"regex"`
-	Exclusions Exclusions `yaml:"exclusions"`
-	Options    string     `yaml:"options"`
-	TargetDir  string     `yaml:"targetDir"`
-	Output     string     `yaml:"output"`
+	Egrep struct {
+		Keywords   []string `yaml:"keywords"`
+		Regex      string   `yaml:"regex"`
+		Options    string   `yaml:"options"`
+		Exclusions struct {
+			Directories []string `yaml:"directories"`
+			Files       []string `yaml:"files"`
+		} `yaml:"exclusions"`
+		TargetDir string `yaml:"targetDir"`
+		Output    string `yaml:"output"`
+	} `yaml:"egrep"`
 }
 
 type Exclusions struct {
@@ -51,29 +56,31 @@ func main() {
 
 			f := excelize.NewFile()
 
+			egrepConfig := config.Egrep
+
 			excludedDirs := ""
-			for _, dir := range config.Exclusions.Directories {
+			for _, dir := range egrepConfig.Exclusions.Directories {
 				excludedDirs += fmt.Sprintf(" --exclude-dir=%s", dir)
 			}
 
 			excludedFiles := ""
-			for _, file := range config.Exclusions.Files {
+			for _, file := range egrepConfig.Exclusions.Files {
 				excludedFiles += fmt.Sprintf(" --exclude=%s", file)
 			}
 
 			targetDir := "."
-			if config.TargetDir != "" {
-				targetDir = config.TargetDir
+			if egrepConfig.TargetDir != "" {
+				targetDir = egrepConfig.TargetDir
 			}
 
 			output := "EgrepResults.xlsx"
-			if config.Output != "" {
-				output = config.Output
+			if egrepConfig.Output != "" {
+				output = egrepConfig.Output
 			}
 
-			for _, keyword := range config.Keywords {
-				replacedRegex := strings.ReplaceAll(config.Regex, "{key}", keyword)
-				out, err := exec.Command("bash", "-c", fmt.Sprintf("egrep %s '%s' %s %s %s", config.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)).Output()
+			for _, keyword := range egrepConfig.Keywords {
+				replacedRegex := strings.ReplaceAll(egrepConfig.Regex, "{key}", keyword)
+				out, err := exec.Command("bash", "-c", fmt.Sprintf("egrep %s '%s' %s %s %s", egrepConfig.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)).Output()
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err.Error())
 					continue
