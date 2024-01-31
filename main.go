@@ -80,7 +80,7 @@ func main() {
 				output = egrepConfig.Output
 			}
 
-			noResultKeywords := []string{}
+			var noResultKeywords []string
 
 			for i, keyword := range egrepConfig.Keywords {
 				replacedRegex := strings.ReplaceAll(egrepConfig.Regex, "{key}", keyword)
