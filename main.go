@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,16 +38,25 @@ func main() {
 		Short:              "egrep command",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			config := Config{}
-
-			data, err := os.ReadFile("config.yml")
+			homeDir, err := os.UserHomeDir()
 			if err != nil {
-				return err
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
 			}
 
-			err = yaml.UnmarshalStrict(data, &config)
+			configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
+			data, err := os.ReadFile(configFile)
 			if err != nil {
-				return err
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+
+			config := Config{}
+
+			err = yaml.Unmarshal(data, &config)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
 			}
 
 			f := excelize.NewFile()
