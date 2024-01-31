@@ -1,15 +1,19 @@
 egrep:
   keywords:
-    - main
-    - excel
-    - Directories
+    - something
   options: -iran
-  regex: '\.{key}'
+  regex: '\.{key}|\.try\(.*:{key}|\.try\!\(.*:{key}'
   exclusions:
     directories:
-      - public
       - spec
+      - tmp
+      - .git
+      - db
+      - virtualbox_sidekiq_test
+      - log
+      - public
+      - vendor
     files:
-      - .gitignore
+      - webpack_admin.js
   targetDir: ./
   output: 'test.xlsx'
