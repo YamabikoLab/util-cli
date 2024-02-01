@@ -8,6 +8,22 @@
 
 ## Egrepサブコマンド
 
-Egrepサブコマンドは指定されたキーワードと一致するプロジェクト中のコードフラグメントを検索します。
+Egrepサブコマンドは指定されたキーワードと一致するプロジェクト中のコードを検索し、キーワードごとにExcelシートに出力します。
+
+```yaml
+egrep:
+  keywords:
+    - something
+  options: -iran
+  regex: '\.{key}'
+  exclusions:
+    directories:
+      - hoge
+      - fuga
+    files:
+      - piyo.js
+  targetDir: ./
+  output: 'output.xlsx'
+```
 
 `~/.util-cli/config.yml` ファイルを使用して egrep サブコマンドの設定を行います。
