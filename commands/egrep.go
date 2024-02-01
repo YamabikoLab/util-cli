@@ -27,6 +27,34 @@ type Config struct {
 
 const ExcelSheetNameLimit = 31
 
+func LoadConfig(file string) (*Config, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	c := &Config{}
+	err = yaml.Unmarshal(data, c)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshaling yaml: %w", err)
+	}
+
+	return c, nil
+}
+
+func CreateCommand(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
+	replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
+	return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
+}
+
+func ListToStrings(items []string, format, separator string) string {
+	str := ""
+	for _, item := range items {
+		str += fmt.Sprintf(format, item) + separator
+	}
+	return str
+}
+
 func RunEgrep(_ *cobra.Command, _ []string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -38,27 +66,16 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
-	data, err := os.ReadFile(configFile)
+	config, err := LoadConfig(configFile)
 	if err != nil {
-		_, err := fmt.Fprintln(os.Stderr, err)
-		if err != nil {
-			return err
-		}
-		os.Exit(1)
-	}
-
-	config := Config{}
-
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		_, err := fmt.Fprintln(os.Stderr, err)
-		if err != nil {
-			return err
-		}
-		os.Exit(1)
+		return fmt.Errorf("loading config: %w", err)
 	}
 
 	f := excelize.NewFile()
+	_, err = f.NewSheet("result")
+	if err != nil {
+		return fmt.Errorf("creating new sheet: %w", err)
+	}
 
 	// Add a new sheet named "result"
 	_, err = f.NewSheet("result")
@@ -78,15 +95,9 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 
 	egrepConfig := config.Egrep
 
-	excludedDirs := ""
-	for _, dir := range egrepConfig.Exclusions.Directories {
-		excludedDirs += fmt.Sprintf(" --exclude-dir=%s", dir)
-	}
+	excludedDirs := ListToStrings(egrepConfig.Exclusions.Directories, "--exclude-dir=%s", " ")
 
-	excludedFiles := ""
-	for _, file := range egrepConfig.Exclusions.Files {
-		excludedFiles += fmt.Sprintf(" --exclude=%s", file)
-	}
+	excludedFiles := ListToStrings(egrepConfig.Exclusions.Files, "--exclude=%s", " ")
 
 	targetDir := "."
 	if egrepConfig.TargetDir != "" {
@@ -101,8 +112,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	var noResultKeywords []string
 
 	for i, keyword := range egrepConfig.Keywords {
-		replacedRegex := strings.ReplaceAll(egrepConfig.Regex, "{key}", keyword)
-		cmd := fmt.Sprintf("egrep %s '%s' %s %s %s", egrepConfig.Options, replacedRegex, targetDir, excludedDirs, excludedFiles)
+		cmd := CreateCommand(keyword, egrepConfig.Options, egrepConfig.Regex, targetDir, excludedDirs, excludedFiles)
 		out, err := exec.Command("bash", "-c", cmd).Output()
 
 		// Output the keyword and command to the "result" sheet
