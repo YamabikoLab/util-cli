@@ -23,6 +23,9 @@ builds:
       - linux
       - windows
       - darwin
+    extra_files:
+      - glob: './config.yml'
+        to: '/'
 
 archives:
   - format: tar.gz
