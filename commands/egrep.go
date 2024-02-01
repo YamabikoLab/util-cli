@@ -23,7 +23,7 @@ type Config struct {
 		TargetDir string `yaml:"targetDir"`
 		Output    struct {
 			Excel struct {
-				Filename string `yaml:"filename"`
+				FilePath string `yaml:"filePath"`
 				Sheet    struct {
 					NameLimit int `yaml:"nameLimit"`
 				} `yaml:"sheet"`
@@ -112,8 +112,8 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	output := "EgrepResults.xlsx"
-	if egrepConfig.Output.Excel.Filename != "" {
-		output = egrepConfig.Output.Excel.Filename
+	if egrepConfig.Output.Excel.FilePath != "" {
+		output = egrepConfig.Output.Excel.FilePath
 	}
 
 	sheetNameLimit := ExcelSheetNameLimit

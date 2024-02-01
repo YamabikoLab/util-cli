@@ -18,6 +18,6 @@ egrep:
   targetDir: ./
   output:
     excel:
-      filename: 'EgrepResults.xlsx'
+      filePath: 'EgrepResults.xlsx'
       sheet:
         nameLimit: 31
