@@ -27,7 +27,7 @@ type Config struct {
 
 const ExcelSheetNameLimit = 31
 
-func RunEgrep(cmd *cobra.Command, args []string) error {
+func RunEgrep(_ *cobra.Command, _ []string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		_, err := fmt.Fprintln(os.Stderr, err)
