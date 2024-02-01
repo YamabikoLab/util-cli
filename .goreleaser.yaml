@@ -23,9 +23,6 @@ builds:
       - linux
       - windows
       - darwin
-    extra_files:
-      - glob: './config.yml'
-        to: '/'
 
 archives:
   - format: tar.gz
@@ -37,6 +34,8 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - config.yml
     # use zip for windows archives
     format_overrides:
       - goos: windows
