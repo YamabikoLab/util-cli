@@ -21,7 +21,14 @@ type Config struct {
 			Files       []string `yaml:"files"`
 		} `yaml:"exclusions"`
 		TargetDir string `yaml:"targetDir"`
-		Output    string `yaml:"output"`
+		Output    struct {
+			Excel struct {
+				Filename string `yaml:"filename"`
+				Sheet    struct {
+					NameLimit int `yaml:"nameLimit"`
+				} `yaml:"sheet"`
+			} `yaml:"excel"`
+		} `yaml:"output"`
 	} `yaml:"egrep"`
 }
 
@@ -105,8 +112,13 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	output := "EgrepResults.xlsx"
-	if egrepConfig.Output != "" {
-		output = egrepConfig.Output
+	if egrepConfig.Output.Excel.Filename != "" {
+		output = egrepConfig.Output.Excel.Filename
+	}
+
+	sheetNameLimit := ExcelSheetNameLimit
+	if egrepConfig.Output.Excel.Sheet.NameLimit != 0 {
+		sheetNameLimit = egrepConfig.Output.Excel.Sheet.NameLimit
 	}
 
 	var noResultKeywords []string
@@ -138,8 +150,8 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 
 		sheetName := keyword
 
-		if len(sheetName) > ExcelSheetNameLimit {
-			sheetName = sheetName[:ExcelSheetNameLimit] // Truncate and prepend with index to ensure uniqueness
+		if len(sheetName) > sheetNameLimit {
+			sheetName = sheetName[:sheetNameLimit] // Truncate and prepend with index to ensure uniqueness
 		}
 
 		_, err = f.NewSheet(sheetName)

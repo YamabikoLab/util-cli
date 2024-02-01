@@ -16,4 +16,8 @@ egrep:
     files:
       - webpack_admin.js
   targetDir: ./
-  output: 'test.xlsx'
+  output:
+    excel:
+      filename: 'EgrepResults.xlsx'
+      sheet:
+        nameLimit: 31
