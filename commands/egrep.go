@@ -34,7 +34,7 @@ type Config struct {
 
 const ExcelSheetNameLimit = 31
 
-func LoadConfig(file string) (*Config, error) {
+func loadConfig(file string) (*Config, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
@@ -49,12 +49,12 @@ func LoadConfig(file string) (*Config, error) {
 	return c, nil
 }
 
-func CreateCommand(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
+func createCommand(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
 	replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
 	return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
 }
 
-func ListToStrings(items []string, format, separator string) string {
+func listToStrings(items []string, format, separator string) string {
 	str := ""
 	for _, item := range items {
 		str += fmt.Sprintf(format, item) + separator
@@ -73,7 +73,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
-	config, err := LoadConfig(configFile)
+	config, err := loadConfig(configFile)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -102,9 +102,9 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 
 	egrepConfig := config.Egrep
 
-	excludedDirs := ListToStrings(egrepConfig.Exclusions.Directories, "--exclude-dir=%s", " ")
+	excludedDirs := listToStrings(egrepConfig.Exclusions.Directories, "--exclude-dir=%s", " ")
 
-	excludedFiles := ListToStrings(egrepConfig.Exclusions.Files, "--exclude=%s", " ")
+	excludedFiles := listToStrings(egrepConfig.Exclusions.Files, "--exclude=%s", " ")
 
 	targetDir := "."
 	if egrepConfig.TargetDir != "" {
@@ -124,7 +124,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	var noResultKeywords []string
 
 	for i, keyword := range egrepConfig.Keywords {
-		cmd := CreateCommand(keyword, egrepConfig.Options, egrepConfig.Regex, targetDir, excludedDirs, excludedFiles)
+		cmd := createCommand(keyword, egrepConfig.Options, egrepConfig.Regex, targetDir, excludedDirs, excludedFiles)
 		out, err := exec.Command("bash", "-c", cmd).Output()
 
 		// Output the keyword and command to the "result" sheet
