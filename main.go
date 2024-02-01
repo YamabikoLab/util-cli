@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/spf13/cobra"
 	"util-cli/commands"
 )
@@ -20,8 +21,8 @@ func main() {
 	}
 
 	utCmd.AddCommand(egrepCmd)
-	err := utCmd.Execute()
-	if err != nil {
+	if err := utCmd.Execute(); err != nil {
+		fmt.Println("Error:", err)
 		return
 	}
 }
