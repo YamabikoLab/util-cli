@@ -2,21 +2,18 @@
 
 `util-cli`は汎用的なコマンドラインユーティリティです。
 
-## コマンドの使用
+## 環境構築
 
-リリースページから最新バージョンのツールをダウンロードしてください。  
-その後、コマンドラインで実行できます。Linux環境の例を以下に示します。  
+リリースページから最新バージョンのツールをダウンロードしてください。
 システムのアーキテクチャに応じて、いずれかを選択してください。
 
-```bash
 https://github.com/YamabikoLab/util-cli/releases
-```
 
 ### ubuntu環境での設定
 tar.gzファイルをダウンロードして解凍してください。
 
 ```bash
-tar -xvzf util-cli-v*.*.*-linux-arm64.tar.gz
+tar xvzf util-cli-v*.*.*-linux-arm64.tar.gz
 ```
 
 bashrcに以下の設定を追加してください。
@@ -40,6 +37,17 @@ config.ymlファイルがホームディレクトリの.util-cliに作成され�
 ## Egrepサブコマンド
 
 Egrepサブコマンドは指定されたキーワードと一致するプロジェクト中のコードを検索し、キーワードごとにExcelシートに出力します。
+
+```bash
+ut egrep
+``` 
+
+`~/.util-cli/config.yml` ファイルを編集して egrep サブコマンドの設定を行ってください。
+
+- keywordsに検索したいキーワードを追加してください。
+- regexに検索したい正規表現を追加してください。 {key}はキーワードに置換されます。
+- キーワードごとにExcelシートに出力されます。
+- 実行したコマンドはresultシートに出力されます。
 
 ```yaml
 egrep:
@@ -67,4 +75,5 @@ egrep:
         nameLimit: 31
 ```
 
-`~/.util-cli/config.yml` ファイルを編集して egrep サブコマンドの設定を行ってください。
+# 要望・バグ報告
+要望やバグ報告は、[GitHub Issues](https://github.com/YamabikoLab/util-cli/issues) にて受け付けています。
