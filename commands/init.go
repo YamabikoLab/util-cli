@@ -24,14 +24,24 @@ func RunInit(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("opening source file: %w", err)
 	}
-	defer srcFile.Close()
+	defer func(srcFile *os.File) {
+		err := srcFile.Close()
+		if err != nil {
+
+		}
+	}(srcFile)
 
 	destFilePath := filepath.Join(configDir, "config.yml")
 	destFile, err := os.Create(destFilePath)
 	if err != nil {
 		return fmt.Errorf("creating destination file: %w", err)
 	}
-	defer destFile.Close()
+	defer func(destFile *os.File) {
+		err := destFile.Close()
+		if err != nil {
+
+		}
+	}(destFile)
 
 	_, err = io.Copy(destFile, srcFile)
 	if err != nil {
@@ -39,8 +49,14 @@ func RunInit(_ *cobra.Command, _ []string) error {
 	}
 
 	// Close files before trying to remove them
-	srcFile.Close()
-	destFile.Close()
+	err = srcFile.Close()
+	if err != nil {
+		return err
+	}
+	err = destFile.Close()
+	if err != nil {
+		return err
+	}
 
 	err = os.Remove("config.yml")
 	if err != nil {
