@@ -52,7 +52,8 @@ ut egrep
 ```yaml
 egrep:
   keywords:  # 検索対象となるキーワードのリスト。
-    - something
+    - something1
+    - something2
   concurrencyLimit: 10  # 同時に実行可能な並行性の制限。数が大きいほど、多くの検索タスクを同時に実行します。
   options: -iran  # egrep コマンドのオプション。詳細は man egrep を参照。
   regex: '\.{key}|\.try\(.*:{key}|\.try\!\(.*:{key}'  # 行がキーワードと一致するかどうかを判断するための正規表現。
@@ -69,11 +70,15 @@ egrep:
     files:  # 検索から除外するファイルのリスト。
       - webpack_admin.js
   targetDir: ./  # 検索を開始する対象ディレクトリ。
-  output:
-    excel:  # 出力フォーマットの設定。
+  output: # 出力フォーマットの設定。
+    excel:
+      enable: true  # Excelファイルへの出力を有効にするかどうか。
       filePath: 'EgrepResults.xlsx'  # 出力のExcelファイル名。
       sheet:
         nameLimit: 31  # Excelシート名の最大文字数の制限。
+    text:
+      enable: true  # テキストファイルへの出力を有効にするかどうか。
+      dirPath: 'egrep_results'  # 出力のテキストファイルのディレクトリ。
 ```
 
 # 要望・バグ報告
