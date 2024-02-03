@@ -100,7 +100,7 @@ func createCommand(keyword, options, regex, targetDir, excludedDirs, excludedFil
 }
 
 // worker キーワードごとにegrepコマンドを実行し、結果をExcelファイル、または、テキストファイルに出力する
-func worker(wg *sync.WaitGroup, index int, egrep *config.Egrep, keyword string, targetDir string, excludedDirs string, excludedFiles string, f *excelize.File, sheetNameLimit int, resultChan chan<- Result) {
+func worker(wg *sync.WaitGroup, m *sync.Mutex, index int, egrep *config.Egrep, keyword string, targetDir string, excludedDirs string, excludedFiles string, f *excelize.File, sheetNameLimit int, resultChan chan<- Result) {
 	defer wg.Done()
 
 	cmd := createCommand(keyword, egrep.Options, egrep.Regex, targetDir, excludedDirs, excludedFiles)
@@ -112,6 +112,11 @@ func worker(wg *sync.WaitGroup, index int, egrep *config.Egrep, keyword string, 
 
 	if err == nil {
 		if egrep.Output.Excel.Enable {
+			// ロックを取得
+			m.Lock()
+			// 関数終了時にロックを解放
+			defer m.Unlock()
+
 			sheetName := normalizeKeyword(keyword, sheetNameLimit)
 
 			lines := strings.Split(string(out), "\n")
@@ -234,6 +239,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	var wg sync.WaitGroup
+	var m sync.Mutex
 	sem := make(chan bool, concurrencyLimit)
 	resultChan := make(chan Result, len(egrep.Keywords))
 
@@ -241,7 +247,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		wg.Add(1)
 		sem <- true // will block if there is already concurrencyLimit workers active
 		go func(i int, keyword string) {
-			worker(&wg, i+1, egrep, keyword, targetDir, excludedDirs, excludedFiles, f, sheetNameLimit, resultChan)
+			worker(&wg, &m, i+1, egrep, keyword, targetDir, excludedDirs, excludedFiles, f, sheetNameLimit, resultChan)
 			<-sem // will only run once a worker has finished
 		}(i, keyword)
 	}
