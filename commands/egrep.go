@@ -94,29 +94,14 @@ func normalizeKeyword(keyword string, limit int) string {
 	return result
 }
 
+func createCommand(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
+	replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
+	return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
+}
+
 // worker キーワードごとにegrepコマンドを実行し、結果をExcelファイル、または、テキストファイルに出力する
-func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, egrep *config.Egrep, sheetNameLimit int, resultChan chan<- Result) {
+func worker(wg *sync.WaitGroup, index int, egrep *config.Egrep, keyword string, targetDir string, excludedDirs string, excludedFiles string, f *excelize.File, sheetNameLimit int, resultChan chan<- Result) {
 	defer wg.Done()
-
-	createCommand := func(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
-		replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
-		return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
-	}
-
-	listToStrings := func(items []string, format, separator string) string {
-		str := ""
-		for _, item := range items {
-			str += fmt.Sprintf(format, item) + separator
-		}
-		return str
-	}
-
-	excludedDirs := listToStrings(egrep.Exclusions.Directories, "--exclude-dir=%s", " ")
-	excludedFiles := listToStrings(egrep.Exclusions.Files, "--exclude=%s", " ")
-	targetDir := "."
-	if egrep.TargetDir != "" {
-		targetDir = egrep.TargetDir
-	}
 
 	cmd := createCommand(keyword, egrep.Options, egrep.Regex, targetDir, excludedDirs, excludedFiles)
 	out, err := exec.Command("bash", "-c", cmd).Output()
@@ -139,6 +124,15 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, egr
 					return
 				}
 			}
+
+			err = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
+			if err != nil {
+				return
+			}
+			err = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
+			if err != nil {
+				return
+			}
 		}
 
 		if egrep.Output.Text.Enable {
@@ -149,15 +143,6 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, egr
 		}
 	} else {
 		result.Error = fmt.Errorf("keyword %s: %v", keyword, err)
-	}
-
-	err = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
-	if err != nil {
-		return
-	}
-	err = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
-	if err != nil {
-		return
 	}
 
 	resultChan <- result
@@ -180,6 +165,14 @@ func initExcelFile() (*excelize.File, error) {
 	return f, nil
 }
 
+func listToStrings(items []string, format, separator string) string {
+	str := ""
+	for _, item := range items {
+		str += fmt.Sprintf(format, item) + separator
+	}
+	return str
+}
+
 // RunEgrep egrepコマンドを実行する
 func RunEgrep(_ *cobra.Command, _ []string) error {
 	homeDir, err := os.UserHomeDir()
@@ -191,6 +184,19 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	egrep, err := loadConfig(configFile)
 	if err != nil {
 		return err
+	}
+
+	excludedDirs := listToStrings(egrep.Exclusions.Directories, "--exclude-dir=%s", " ")
+	excludedFiles := listToStrings(egrep.Exclusions.Files, "--exclude=%s", " ")
+	targetDir := "."
+	if egrep.TargetDir != "" {
+		targetDir = egrep.TargetDir
+	}
+
+	// Excelとテキストの出力が両方無効の場合はメッセージを表示して終了
+	if !egrep.Output.Excel.Enable && !egrep.Output.Text.Enable {
+		fmt.Println("Excel and text outputs are both disabled. Nothing to do.")
+		return nil
 	}
 
 	var f *excelize.File
@@ -242,7 +248,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		wg.Add(1)
 		sem <- true // will block if there is already concurrencyLimit workers active
 		go func(i int, keyword string) {
-			worker(&wg, f, i+1, keyword, egrep, sheetNameLimit, resultChan)
+			worker(&wg, i+1, egrep, keyword, targetDir, excludedDirs, excludedFiles, f, sheetNameLimit, resultChan)
 			<-sem // will only run once a worker has finished
 		}(i, keyword)
 	}
