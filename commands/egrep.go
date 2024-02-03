@@ -10,53 +10,92 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"util-cli/config"
 )
 
-type Config struct {
-	Egrep struct {
-		Keywords         []string `yaml:"keywords"`
-		ConcurrencyLimit int      `yaml:"concurrencyLimit"`
-		Options          string   `yaml:"options"`
-		Regex            string   `yaml:"regex"`
-		Exclusions       struct {
-			Directories []string `yaml:"directories"`
-			Files       []string `yaml:"files"`
-		} `yaml:"exclusions"`
-		TargetDir string `yaml:"targetDir"`
-		Output    struct {
-			Excel struct {
-				FilePath string `yaml:"filePath"`
-				Sheet    struct {
-					NameLimit int `yaml:"nameLimit"`
-				} `yaml:"sheet"`
-			} `yaml:"excel"`
-		} `yaml:"output"`
-	} `yaml:"egrep"`
-}
-
+// ExcelSheetNameLimit Excelのシート名の最大文字数
 const ExcelSheetNameLimit = 31
 
-func loadConfig(file string) (*Config, error) {
+// InvalidExcelCharacters Excelのシート名に使えない文字
+var InvalidExcelCharacters = map[rune]bool{
+	'*':  true,
+	'/':  true,
+	'[':  true,
+	']':  true,
+	'?':  true,
+	'\\': true,
+	':':  true,
+}
+
+// loadConfig 設定ファイルを読み込む
+func loadConfig(file string) (*config.Egrep, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	c := &Config{}
+	c := &config.Config{}
 	err = yaml.Unmarshal(data, c)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshaling yaml: %w", err)
 	}
 
-	return c, nil
+	return &c.Egrep, nil
 }
 
+// Result コマンドの実行結果
 type Result struct {
 	Keyword string
 	Error   error
 }
 
-func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, config *Config, sheetNameLimit int, resultChan chan<- Result) {
+// outputToTextFile テキストファイルに出力する
+func outputToTextFile(keyword string, output string, dirPath string) error {
+	// ファイルを作成する
+	file, err := os.Create(filepath.Join(dirPath, fmt.Sprintf("%s.txt", keyword)))
+	if err != nil {
+		return err
+	}
+
+	// 関数終了時にファイルを閉じる
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+
+		}
+	}(file)
+
+	// 結果を書き込む
+	_, err = file.WriteString(output)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// normalizeKeyword キーワードを正規化する
+func normalizeKeyword(keyword string, limit int) string {
+	normalized := make([]rune, 0, len(keyword))
+
+	for _, ch := range keyword {
+		if InvalidExcelCharacters[ch] {
+			normalized = append(normalized, '_')
+		} else {
+			normalized = append(normalized, ch)
+		}
+	}
+
+	result := string(normalized)
+	if len(result) > limit {
+		result = result[:limit]
+	}
+
+	return result
+}
+
+// worker キーワードごとにegrepコマンドを実行し、結果をExcelファイル、または、テキストファイルに出力する
+func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, egrep *config.Egrep, sheetNameLimit int, resultChan chan<- Result) {
 	defer wg.Done()
 
 	createCommand := func(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
@@ -72,7 +111,6 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, con
 		return str
 	}
 
-	egrep := config.Egrep
 	excludedDirs := listToStrings(egrep.Exclusions.Directories, "--exclude-dir=%s", " ")
 	excludedFiles := listToStrings(egrep.Exclusions.Files, "--exclude=%s", " ")
 	targetDir := "."
@@ -88,16 +126,25 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, con
 	result.Error = err
 
 	if err == nil {
-		sheetName := keyword
-		if len(sheetName) > sheetNameLimit {
-			sheetName = sheetName[:sheetNameLimit]
+		if egrep.Output.Excel.Enable {
+			sheetName := normalizeKeyword(keyword, sheetNameLimit)
+			if len(sheetName) > sheetNameLimit {
+				sheetName = sheetName[:sheetNameLimit]
+			}
+
+			lines := strings.Split(string(out), "\n")
+			for j := 0; j < len(lines); j++ {
+				err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", j+1), lines[j])
+				if err != nil {
+					return
+				}
+			}
 		}
 
-		lines := strings.Split(string(out), "\n")
-		for j := 0; j < len(lines); j++ {
-			err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", j+1), lines[j])
+		if egrep.Output.Text.Enable {
+			err = outputToTextFile(keyword, string(out), egrep.Output.Text.DirPath)
 			if err != nil {
-				return
+				result.Error = fmt.Errorf("writing to text file for keyword %s: %v", keyword, err)
 			}
 		}
 	} else {
@@ -116,6 +163,7 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, con
 	resultChan <- result
 }
 
+// initExcelFile Excelファイルを初期化する
 func initExcelFile() (*excelize.File, error) {
 	f := excelize.NewFile()
 	if _, err := f.NewSheet("result"); err != nil {
@@ -132,6 +180,7 @@ func initExcelFile() (*excelize.File, error) {
 	return f, nil
 }
 
+// RunEgrep egrepコマンドを実行する
 func RunEgrep(_ *cobra.Command, _ []string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -139,41 +188,50 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
-	config, err := loadConfig(configFile)
+	egrep, err := loadConfig(configFile)
 	if err != nil {
 		return err
 	}
 
-	f, err := initExcelFile()
-	if err != nil {
-		return err
+	var f *excelize.File
+	var sheetNameLimit int
+	if egrep.Output.Excel.Enable {
+		f, err = initExcelFile()
+		if err != nil {
+			return err
+		}
+
+		sheetNameLimit = ExcelSheetNameLimit
+		if egrep.Output.Excel.Sheet.NameLimit != 0 {
+			sheetNameLimit = egrep.Output.Excel.Sheet.NameLimit
+		}
+
+		for _, keyword := range egrep.Keywords {
+			sheetName := keyword
+			if len(sheetName) > sheetNameLimit {
+				sheetName = sheetName[:sheetNameLimit]
+			}
+
+			if _, err := f.NewSheet(sheetName); err != nil {
+				_, err := fmt.Fprintln(os.Stderr, err.Error())
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
-	egrep := config.Egrep
+	if egrep.Output.Text.Enable {
+		err = os.MkdirAll(egrep.Output.Text.DirPath, 0755)
+		if err != nil {
+			return err
+		}
+	}
 	concurrencyLimit := egrep.ConcurrencyLimit
 
 	output := "EgrepResults.xlsx"
 	if egrep.Output.Excel.FilePath != "" {
 		output = egrep.Output.Excel.FilePath
-	}
-
-	sheetNameLimit := ExcelSheetNameLimit
-	if egrep.Output.Excel.Sheet.NameLimit != 0 {
-		sheetNameLimit = egrep.Output.Excel.Sheet.NameLimit
-	}
-
-	for _, keyword := range egrep.Keywords {
-		sheetName := keyword
-		if len(sheetName) > sheetNameLimit {
-			sheetName = sheetName[:sheetNameLimit]
-		}
-
-		if _, err := f.NewSheet(sheetName); err != nil {
-			_, err := fmt.Fprintln(os.Stderr, err.Error())
-			if err != nil {
-				return err
-			}
-		}
 	}
 
 	var wg sync.WaitGroup
@@ -184,7 +242,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		wg.Add(1)
 		sem <- true // will block if there is already concurrencyLimit workers active
 		go func(i int, keyword string) {
-			worker(&wg, f, i+1, keyword, config, sheetNameLimit, resultChan)
+			worker(&wg, f, i+1, keyword, egrep, sheetNameLimit, resultChan)
 			<-sem // will only run once a worker has finished
 		}(i, keyword)
 	}
@@ -201,11 +259,16 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	if err := f.SaveAs(output); err != nil {
-		return err
+	if egrep.Output.Excel.Enable {
+		if err := f.SaveAs(output); err != nil {
+			return err
+		}
+		fmt.Println("Excel output saved to:", output)
 	}
 
-	fmt.Println("Output saved to:", output)
+	if egrep.Output.Text.Enable {
+		fmt.Println("Text output saved to:", egrep.Output.Text.DirPath)
+	}
 
 	return nil
 }

@@ -17,8 +17,12 @@ egrep:
     files:  # 検索から除外するファイルのリスト。
       - webpack_admin.js
   targetDir: ./  # 検索を開始する対象ディレクトリ。
-  output:
-    excel:  # 出力フォーマットの設定。
+  output: # 出力フォーマットの設定。
+    excel:
+      enable: true  # Excelファイルへの出力を有効にするかどうか。
       filePath: 'EgrepResults.xlsx'  # 出力のExcelファイル名。
       sheet:
         nameLimit: 31  # Excelシート名の最大文字数の制限。
+    text:
+      enable: true  # テキストファイルへの出力を有効にするかどうか。
+      dirPath: 'egrep_results'  # 出力のテキストファイルのディレクトリ。
