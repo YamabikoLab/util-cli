@@ -1,6 +1,7 @@
 egrep:
   keywords:  # 検索対象となるキーワードのリスト。
-    - something
+    - something1
+    - something2
   concurrencyLimit: 10  # 同時に実行可能な並行性の制限。数が大きいほど、多くの検索タスクを同時に実行します。
   options: -iran  # egrep コマンドのオプション。詳細は man egrep を参照。
   regex: '\.{key}|\.try\(.*:{key}|\.try\!\(.*:{key}'  # 行がキーワードと一致するかどうかを判断するための正規表現。
