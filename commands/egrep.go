@@ -50,28 +50,36 @@ func loadConfig(file string) (*Config, error) {
 	return c, nil
 }
 
-func createCommand(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
-	replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
-	return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
-}
-
-func listToStrings(items []string, format, separator string) string {
-	str := ""
-	for _, item := range items {
-		str += fmt.Sprintf(format, item) + separator
-	}
-	return str
-}
-
 type Result struct {
 	Keyword string
 	Error   error
 }
 
-func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, config *Config, targetDir string, excludedDirs string, excludedFiles string, sheetNameLimit int, resultChan chan<- Result) {
+func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, config *Config, sheetNameLimit int, resultChan chan<- Result) {
 	defer wg.Done()
 
-	cmd := createCommand(keyword, config.Egrep.Options, config.Egrep.Regex, targetDir, excludedDirs, excludedFiles)
+	createCommand := func(keyword, options, regex, targetDir, excludedDirs, excludedFiles string) string {
+		replacedRegex := strings.ReplaceAll(regex, "{key}", keyword)
+		return fmt.Sprintf("egrep %s '%s' %s %s %s", options, replacedRegex, targetDir, excludedDirs, excludedFiles)
+	}
+
+	listToStrings := func(items []string, format, separator string) string {
+		str := ""
+		for _, item := range items {
+			str += fmt.Sprintf(format, item) + separator
+		}
+		return str
+	}
+
+	egrep := config.Egrep
+	excludedDirs := listToStrings(egrep.Exclusions.Directories, "--exclude-dir=%s", " ")
+	excludedFiles := listToStrings(egrep.Exclusions.Files, "--exclude=%s", " ")
+	targetDir := "."
+	if egrep.TargetDir != "" {
+		targetDir = egrep.TargetDir
+	}
+
+	cmd := createCommand(keyword, egrep.Options, egrep.Regex, targetDir, excludedDirs, excludedFiles)
 	out, err := exec.Command("bash", "-c", cmd).Output()
 
 	var result Result
@@ -79,103 +87,98 @@ func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, con
 	result.Error = err
 
 	if err == nil {
-		// success case: output the result to a new sheet
 		sheetName := keyword
 		if len(sheetName) > sheetNameLimit {
 			sheetName = sheetName[:sheetNameLimit]
 		}
 
-		_, err := f.NewSheet(sheetName)
-		if err != nil {
-			_, err := fmt.Fprintln(os.Stderr, err.Error())
+		lines := strings.Split(string(out), "\n")
+		for j := 0; j < len(lines); j++ {
+			err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", j+1), lines[j])
 			if err != nil {
 				return
 			}
-		} else {
-			lines := strings.Split(string(out), "\n")
-			for j := 0; j < len(lines); j++ {
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", j+1), lines[j])
-			}
 		}
 	} else {
-		// failed case: put the keyword and error message to the result
 		result.Error = fmt.Errorf("keyword %s: %v", keyword, err)
 	}
 
-	// Common: Output the keyword and command to the "result" sheet
-	_ = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
-	_ = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
+	err = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
+	if err != nil {
+		return
+	}
+	err = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
+	if err != nil {
+		return
+	}
 
 	resultChan <- result
+}
+
+func initExcelFile() (*excelize.File, error) {
+	f := excelize.NewFile()
+	if _, err := f.NewSheet("result"); err != nil {
+		return nil, err
+	}
+
+	if err := f.SetCellValue("result", "A1", "keyword"); err != nil {
+		return nil, err
+	}
+	if err := f.SetCellValue("result", "B1", "cmd"); err != nil {
+		return nil, err
+	}
+
+	return f, nil
 }
 
 func RunEgrep(_ *cobra.Command, _ []string) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		_, err := fmt.Fprintln(os.Stderr, err)
-		if err != nil {
-			return err
-		}
-		os.Exit(1)
+		return err
 	}
 
 	configFile := filepath.Join(homeDir, ".util-cli", "config.yml")
 	config, err := loadConfig(configFile)
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return err
 	}
 
-	f := excelize.NewFile()
-	_, err = f.NewSheet("result")
-	if err != nil {
-		return fmt.Errorf("creating new sheet: %w", err)
-	}
-
-	// Add a new sheet named "result"
-	_, err = f.NewSheet("result")
+	f, err := initExcelFile()
 	if err != nil {
 		return err
 	}
 
-	// Set the headers for the "result" sheet
-	err = f.SetCellValue("result", "A1", "keyword")
-	if err != nil {
-		return err
-	}
-	err = f.SetCellValue("result", "B1", "cmd")
-	if err != nil {
-		return err
-	}
-
-	egrepConfig := config.Egrep
-
-	excludedDirs := listToStrings(egrepConfig.Exclusions.Directories, "--exclude-dir=%s", " ")
-
-	excludedFiles := listToStrings(egrepConfig.Exclusions.Files, "--exclude=%s", " ")
-
-	targetDir := "."
-	if egrepConfig.TargetDir != "" {
-		targetDir = egrepConfig.TargetDir
-	}
-
+	egrep := config.Egrep
 	output := "EgrepResults.xlsx"
-	if egrepConfig.Output.Excel.FilePath != "" {
-		output = egrepConfig.Output.Excel.FilePath
+	if egrep.Output.Excel.FilePath != "" {
+		output = egrep.Output.Excel.FilePath
 	}
 
 	sheetNameLimit := ExcelSheetNameLimit
-	if egrepConfig.Output.Excel.Sheet.NameLimit != 0 {
-		sheetNameLimit = egrepConfig.Output.Excel.Sheet.NameLimit
+	if egrep.Output.Excel.Sheet.NameLimit != 0 {
+		sheetNameLimit = egrep.Output.Excel.Sheet.NameLimit
 	}
 
-	var noResultKeywords []string
-
 	var wg sync.WaitGroup
-	resultChan := make(chan Result, len(egrepConfig.Keywords))
+	resultChan := make(chan Result, len(egrep.Keywords))
 
-	for i, keyword := range egrepConfig.Keywords {
+	for _, keyword := range egrep.Keywords {
+		sheetName := keyword
+		if len(sheetName) > sheetNameLimit {
+			sheetName = sheetName[:sheetNameLimit]
+		}
+
+		if _, err := f.NewSheet(sheetName); err != nil {
+			_, err := fmt.Fprintln(os.Stderr, err.Error())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	for i, keyword := range egrep.Keywords {
 		wg.Add(1)
-		go worker(&wg, f, i+1, keyword, config, targetDir, excludedDirs, excludedFiles, sheetNameLimit, resultChan)
+		go worker(&wg, f, i+1, keyword, config, sheetNameLimit, resultChan)
 	}
 
 	go func() {
@@ -183,10 +186,9 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		close(resultChan)
 	}()
 
-	noResultKeywords = make([]string, 0)
+	noResultKeywords := make([]string, 0)
 	for result := range resultChan {
 		if result.Error != nil {
-			// error occurred in one of the worker, you may want to append it to the noResultKeywords
 			noResultKeywords = append(noResultKeywords, result.Keyword)
 		}
 	}
