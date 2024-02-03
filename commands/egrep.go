@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type Config struct {
@@ -60,6 +61,52 @@ func listToStrings(items []string, format, separator string) string {
 		str += fmt.Sprintf(format, item) + separator
 	}
 	return str
+}
+
+type Result struct {
+	Keyword string
+	Error   error
+}
+
+func worker(wg *sync.WaitGroup, f *excelize.File, index int, keyword string, config *Config, targetDir string, excludedDirs string, excludedFiles string, sheetNameLimit int, resultChan chan<- Result) {
+	defer wg.Done()
+
+	cmd := createCommand(keyword, config.Egrep.Options, config.Egrep.Regex, targetDir, excludedDirs, excludedFiles)
+	out, err := exec.Command("bash", "-c", cmd).Output()
+
+	var result Result
+	result.Keyword = keyword
+	result.Error = err
+
+	if err == nil {
+		// success case: output the result to a new sheet
+		sheetName := keyword
+		if len(sheetName) > sheetNameLimit {
+			sheetName = sheetName[:sheetNameLimit]
+		}
+
+		_, err := f.NewSheet(sheetName)
+		if err != nil {
+			_, err := fmt.Fprintln(os.Stderr, err.Error())
+			if err != nil {
+				return
+			}
+		} else {
+			lines := strings.Split(string(out), "\n")
+			for j := 0; j < len(lines); j++ {
+				_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", j+1), lines[j])
+			}
+		}
+	} else {
+		// failed case: put the keyword and error message to the result
+		result.Error = fmt.Errorf("keyword %s: %v", keyword, err)
+	}
+
+	// Common: Output the keyword and command to the "result" sheet
+	_ = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
+	_ = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
+
+	resultChan <- result
 }
 
 func RunEgrep(_ *cobra.Command, _ []string) error {
@@ -123,49 +170,24 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 
 	var noResultKeywords []string
 
+	var wg sync.WaitGroup
+	resultChan := make(chan Result, len(egrepConfig.Keywords))
+
 	for i, keyword := range egrepConfig.Keywords {
-		cmd := createCommand(keyword, egrepConfig.Options, egrepConfig.Regex, targetDir, excludedDirs, excludedFiles)
-		out, err := exec.Command("bash", "-c", cmd).Output()
+		wg.Add(1)
+		go worker(&wg, f, i+1, keyword, config, targetDir, excludedDirs, excludedFiles, sheetNameLimit, resultChan)
+	}
 
-		// Output the keyword and command to the "result" sheet
-		err = f.SetCellValue("result", fmt.Sprintf("A%d", i+2), keyword)
-		if err != nil {
-			return err
-		}
-		err = f.SetCellValue("result", fmt.Sprintf("B%d", i+2), cmd)
-		if err != nil {
-			return err
-		}
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
 
-		if err != nil {
-			if len(strings.TrimSpace(string(out))) == 0 {
-				noResultKeywords = append(noResultKeywords, keyword)
-			}
-			_, err := fmt.Fprintln(os.Stderr, err.Error())
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		sheetName := keyword
-
-		if len(sheetName) > sheetNameLimit {
-			sheetName = sheetName[:sheetNameLimit] // Truncate and prepend with index to ensure uniqueness
-		}
-
-		_, err = f.NewSheet(sheetName)
-		if err != nil {
-			_, err := fmt.Fprintln(os.Stderr, err.Error())
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		lines := strings.Split(string(out), "\n")
-		for j := 1; j <= len(lines); j++ {
-			_ = f.SetCellValue(keyword, fmt.Sprintf("A%d", j), lines[j-1])
+	noResultKeywords = make([]string, 0)
+	for result := range resultChan {
+		if result.Error != nil {
+			// error occurred in one of the worker, you may want to append it to the noResultKeywords
+			noResultKeywords = append(noResultKeywords, result.Keyword)
 		}
 	}
 
@@ -173,12 +195,6 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if len(noResultKeywords) > 0 {
-		fmt.Println("No results keywords:")
-		for _, keyword := range noResultKeywords {
-			fmt.Println(keyword)
-		}
-	}
 	fmt.Println("Output saved to:", output)
 
 	return nil
