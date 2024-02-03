@@ -14,10 +14,11 @@ import (
 
 type Config struct {
 	Egrep struct {
-		Keywords   []string `yaml:"keywords"`
-		Regex      string   `yaml:"regex"`
-		Options    string   `yaml:"options"`
-		Exclusions struct {
+		Keywords         []string `yaml:"keywords"`
+		ConcurrencyLimit int      `yaml:"concurrencyLimit"`
+		Options          string   `yaml:"options"`
+		Regex            string   `yaml:"regex"`
+		Exclusions       struct {
 			Directories []string `yaml:"directories"`
 			Files       []string `yaml:"files"`
 		} `yaml:"exclusions"`
@@ -149,6 +150,8 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	}
 
 	egrep := config.Egrep
+	concurrencyLimit := egrep.ConcurrencyLimit
+
 	output := "EgrepResults.xlsx"
 	if egrep.Output.Excel.FilePath != "" {
 		output = egrep.Output.Excel.FilePath
@@ -158,9 +161,6 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 	if egrep.Output.Excel.Sheet.NameLimit != 0 {
 		sheetNameLimit = egrep.Output.Excel.Sheet.NameLimit
 	}
-
-	var wg sync.WaitGroup
-	resultChan := make(chan Result, len(egrep.Keywords))
 
 	for _, keyword := range egrep.Keywords {
 		sheetName := keyword
@@ -176,9 +176,17 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	var wg sync.WaitGroup
+	sem := make(chan bool, concurrencyLimit)
+	resultChan := make(chan Result, len(egrep.Keywords))
+
 	for i, keyword := range egrep.Keywords {
 		wg.Add(1)
-		go worker(&wg, f, i+1, keyword, config, sheetNameLimit, resultChan)
+		sem <- true // will block if there is already concurrencyLimit workers active
+		go func(i int, keyword string) {
+			worker(&wg, f, i+1, keyword, config, sheetNameLimit, resultChan)
+			<-sem // will only run once a worker has finished
+		}(i, keyword)
 	}
 
 	go func() {
