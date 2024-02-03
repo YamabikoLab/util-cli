@@ -113,9 +113,6 @@ func worker(wg *sync.WaitGroup, index int, egrep *config.Egrep, keyword string, 
 	if err == nil {
 		if egrep.Output.Excel.Enable {
 			sheetName := normalizeKeyword(keyword, sheetNameLimit)
-			if len(sheetName) > sheetNameLimit {
-				sheetName = sheetName[:sheetNameLimit]
-			}
 
 			lines := strings.Split(string(out), "\n")
 			for j := 0; j < len(lines); j++ {
@@ -213,11 +210,7 @@ func RunEgrep(_ *cobra.Command, _ []string) error {
 		}
 
 		for _, keyword := range egrep.Keywords {
-			sheetName := keyword
-			if len(sheetName) > sheetNameLimit {
-				sheetName = sheetName[:sheetNameLimit]
-			}
-
+			sheetName := normalizeKeyword(keyword, sheetNameLimit)
 			if _, err := f.NewSheet(sheetName); err != nil {
 				_, err := fmt.Fprintln(os.Stderr, err.Error())
 				if err != nil {
