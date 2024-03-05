@@ -110,13 +110,25 @@ func worker(wg *sync.WaitGroup, m *sync.Mutex, index int, egrep *config.Egrep, k
 	result.Keyword = keyword
 	result.Error = err
 
+	// キーワードとコマンドを常に Excel の result シートに記録
+	if egrep.Output.Excel.Enable {
+		// ロックを取得
+		m.Lock()
+		// 関数終了時にロックを解放
+		defer m.Unlock()
+
+		err = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
+		if err != nil {
+			return
+		}
+		err = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
+		if err != nil {
+			return
+		}
+	}
+
 	if err == nil {
 		if egrep.Output.Excel.Enable {
-			// ロックを取得
-			m.Lock()
-			// 関数終了時にロックを解放
-			defer m.Unlock()
-
 			sheetName := normalizeKeyword(keyword, sheetNameLimit)
 
 			lines := strings.Split(string(out), "\n")
@@ -125,15 +137,6 @@ func worker(wg *sync.WaitGroup, m *sync.Mutex, index int, egrep *config.Egrep, k
 				if err != nil {
 					return
 				}
-			}
-
-			err = f.SetCellValue("result", fmt.Sprintf("A%d", index+1), keyword)
-			if err != nil {
-				return
-			}
-			err = f.SetCellValue("result", fmt.Sprintf("B%d", index+1), cmd)
-			if err != nil {
-				return
 			}
 		}
 
